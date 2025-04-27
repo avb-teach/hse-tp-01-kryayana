@@ -1,7 +1,7 @@
 param (
     [string]$InputDir,
     [string]$OutputDir,
-    [string]$MaxDepth
+    [string]$MaxDepthParam
 )
 
 if (-not $InputDir -or -not $OutputDir) {
@@ -13,45 +13,29 @@ if (-not (Test-Path -Path $OutputDir)) {
     New-Item -ItemType Directory -Path $OutputDir | Out-Null
 }
 
-function Get-Files {
-    param (
-        [string]$Path,
-        [int]$Depth
-    )
+$MaxDepth = -1
 
-    $results = @()
-    function Recurse {
-        param (
-            [string]$CurrentPath,
-            [int]$Level
-        )
-
-        if ($Depth -ne -1 -and $Level -gt $Depth) {
-            return
-        }
-
-        Get-ChildItem -Path $CurrentPath -File | ForEach-Object {
-            $results += $_
-        }
-
-        Get-ChildItem -Path $CurrentPath -Directory | ForEach-Object {
-            Recurse -CurrentPath $_.FullName -Level ($Level + 1)
-        }
+if ($MaxDepthParam -and $MaxDepthParam.StartsWith("--max_depth")) {
+    $split = $MaxDepthParam.Split(" ")
+    if ($split.Length -eq 2) {
+        $MaxDepth = [int]$split[1]
     }
-
-    Recurse -CurrentPath $Path -Level 1
-
-    return $results
 }
 
-function Copy-AllFiles {
+function Copy-FilesWithDepth {
     param (
-        [array]$Files,
-        [string]$Destination
+        [string]$Source,
+        [string]$Destination,
+        [int]$CurrentDepth,
+        [int]$MaxAllowedDepth
     )
 
-    foreach ($file in $Files) {
-        $filename = $file.Name
+    if ($MaxAllowedDepth -ne -1 -and $CurrentDepth -gt $MaxAllowedDepth) {
+        return
+    }
+
+    Get-ChildItem -Path $Source -File | ForEach-Object {
+        $filename = $_.Name
         $destPath = Join-Path -Path $Destination -ChildPath $filename
 
         if (Test-Path $destPath) {
@@ -65,18 +49,12 @@ function Copy-AllFiles {
             } while (Test-Path $destPath)
         }
 
-        Copy-Item -Path $file.FullName -Destination $destPath
+        Copy-Item -Path $_.FullName -Destination $destPath
+    }
+
+    Get-ChildItem -Path $Source -Directory | ForEach-Object {
+        Copy-FilesWithDepth -Source $_.FullName -Destination $Destination -CurrentDepth ($CurrentDepth + 1) -MaxAllowedDepth $MaxAllowedDepth
     }
 }
 
-$depthValue = -1
-
-if ($MaxDepth -and $MaxDepth.StartsWith("--max_depth")) {
-    $parts = $MaxDepth.Split(" ")
-    if ($parts.Length -eq 2) {
-        $depthValue = [int]$parts[1]
-    }
-}
-
-$files = Get-Files -Path $InputDir -Depth $depthValue
-Copy-AllFiles -Files $files -Destination $OutputDir
+Copy-FilesWithDepth -Source $InputDir -Destination $OutputDir -CurrentDepth 1 -MaxAllowedDepth $MaxDepth
