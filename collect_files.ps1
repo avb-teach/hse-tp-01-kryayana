@@ -1,25 +1,13 @@
-param (
-    [string]$InputDir,
-    [string]$OutputDir,
-    [string]$MaxDepthParam
-)
+$InputDir = $args[0]
+$OutputDir = $args[1]
+$MaxDepth = -1
 
-if (-not $InputDir -or -not $OutputDir) {
-    Write-Output "Usage: .\collect_files.ps1 <InputDir> <OutputDir> [--max_depth N]"
-    exit
+if ($args.Count -ge 4 -and $args[2] -eq "--max_depth") {
+    $MaxDepth = [int]$args[3]
 }
 
 if (-not (Test-Path -Path $OutputDir)) {
     New-Item -ItemType Directory -Path $OutputDir | Out-Null
-}
-
-$MaxDepth = -1
-
-if ($MaxDepthParam -and $MaxDepthParam.StartsWith("--max_depth")) {
-    $split = $MaxDepthParam.Split(" ")
-    if ($split.Length -eq 2) {
-        $MaxDepth = [int]$split[1]
-    }
 }
 
 function Copy-FilesWithDepth {
